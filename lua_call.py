@@ -201,13 +201,15 @@ REGISTRY = {}
 
 #------------------------ our dummy Redis connection -------------------------
 
-@apply
-class dummy(object):
+#@apply
+class _dummy:
     '''A fake Redis connection you can use to defer script registration.'''
     def __getattr__(self, name):
         return self
     def __call__(self, *args, **kwargs):
         return self
+dummy = _dummy()
+
 
 #------------------ This handles the script fixing/mangling ------------------
 
@@ -292,8 +294,8 @@ def load_scripts(conn, prefix=''):
     pipe.execute()
     return added
 
-@apply
-class function(object):
+#@apply
+class _function:
     '''
     Use me to register your Lua functions like::
 
@@ -315,6 +317,7 @@ class function(object):
     '''
     def __getattr__(self, name):
         return _register(name)
+function = _function()
 
 def _register(name):
     '''Internal implementation detail, you can ignore me.'''
@@ -329,17 +332,18 @@ def _register(name):
 
         # fix/mangle the script
         fixed = _fix_calls(script, module)
-        hash = sha1(fixed).hexdigest()
+        # * change from `hash` to `hash_`
+        hash_ = sha1(fixed.encode()).hexdigest()
 
         # register the function in Redis
         hash2 = conn.pipeline(True) \
             .script_load(fixed) \
-            .hset(':registry', full, 'f_' + hash) \
+            .hset(':registry', full, 'f_' + hash_) \
             .execute()
         # keep a local copy
-        REGISTRY[full] = ('f_' + hash, fixed)
+        REGISTRY[full] = ('f_' + hash_, fixed)
         # register the name in the namespace
-        gl[name] = f = _caller(hash)
+        gl[name] = f = _caller(hash_)
         return f
     return call
 
